@@ -13,3 +13,29 @@ export function hexToRgb(hexProp: string) {
       )}`
     : null
 }
+
+export function isIndex(value: unknown): value is number {
+  return Number(value) >= 0
+}
+
+/**
+ * Constructs a path with dot paths for arrays to use brackets to be compatible with vee-validate path syntax
+ */
+export function normalizeFormPath(path: string): string {
+  const pathArr = path.split('.')
+  if (!pathArr.length) {
+    return ''
+  }
+
+  let fullPath = String(pathArr[0])
+  for (let i = 1; i < pathArr.length; i++) {
+    if (isIndex(pathArr[i])) {
+      fullPath += `[${pathArr[i]}]`
+      continue
+    }
+
+    fullPath += `.${pathArr[i]}`
+  }
+
+  return fullPath
+}
