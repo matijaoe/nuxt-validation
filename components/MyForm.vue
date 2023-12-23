@@ -11,6 +11,8 @@ const schema = z.object({
 })
 type Values = z.infer<typeof schema>
 
+const mode: FormValidationMode = 'submit'
+const modeAfterSubmit: FormValidationModeAfterSubmit = 'submit'
 const {
   values,
   fields,
@@ -23,10 +25,11 @@ const {
   setFormValues,
   meta,
   fieldsMeta,
-  fieldHandlers,
+  onField,
 } = useForm({
   schema,
-  mode: 'lazy',
+  mode,
+  modeAfterSubmit,
   initialValues: {
     age: 24
   }
@@ -45,16 +48,12 @@ const [veeAge] = defineField('age')
 const onSubmit = async (values: Values) => {
   console.log('submit', values)
   await veeValidate()
-  // console.log('VEE RES', veeRes)
 }
 
 const submitHandler = handleSubmit({
   onValid: onSubmit,
   onInvalid: async (results) => {
     console.log('❌ Validation fail', results)
-    await veeValidate()
-    // const veeRes = await veeValidate()
-    // console.log('VEE RES', veeRes)
   }
 })
 
@@ -62,29 +61,32 @@ const onReset = () => {
   reset()
   veeForm.resetForm()
 }
-
-const onNameChange = (e: InputEvent) => {
-  const keys = Object.keys(e)
-  const name = (e.currentTarget as HTMLInputElement).name
-}
 </script>
 
 <template>
   <div class="grid grid-cols-2 max-w-4xl mx-auto gap-8">
     <form class="flex flex-col gap-4" @submit.prevent="submitHandler">
       <UCard>
+        <div class="flex gap-2">
+          <UBadge class="mb-4" size="sm" color="green" variant="soft">
+            {{ mode }}
+          </UBadge>
+          <UBadge class="mb-4" size="sm" color="orange" variant="soft">
+            {{ modeAfterSubmit }}
+          </UBadge>
+        </div>
         <div class="flex flex-col gap-4">
           <UFormGroup :error="errors.name">
-            <UInput v-model="name" placeholder="Name" name="name" @input="onNameChange" v-on="fieldHandlers" />
+            <UInput v-model="name" placeholder="Name" name="name" v-on="onField" />
           </UFormGroup>
           <UFormGroup :error="errors.email">
-            <UInput v-model="email" type="text" placeholder="Email" name="email" v-on="fieldHandlers" />
+            <UInput v-model="email" type="text" placeholder="Email" name="email" v-on="onField" />
           </UFormGroup>
           <UFormGroup :error="errors.password">
-            <UInput v-model="password" type="password" placeholder="Password" name="password" v-on="fieldHandlers" />
+            <UInput v-model="password" type="password" placeholder="Password" name="password" v-on="onField" />
           </UFormGroup>
           <UFormGroup :error="errors.age">
-            <UInput v-model="age" type="number" placeholder="Age" name="age" v-on="fieldHandlers" />
+            <UInput v-model="age" type="number" placeholder="Age" name="age" v-on="onField" />
           </UFormGroup>
 
           <div class="flex justify-end gap-2">
@@ -93,7 +95,7 @@ const onNameChange = (e: InputEvent) => {
               variant="ghost"
               @click="setFormValues({
                 age: 99,
-                name: ''
+                name: 'patrik'
               })"
             >
               field values
