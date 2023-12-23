@@ -50,6 +50,7 @@ export function useForm<TSchema extends z.ZodObject<any, any>>({
   const {
     count: submitCount,
     inc: incSubmitCount,
+    reset: resetSubmitCount,
   } = useCounter(0)
   const isSubmitting = ref(false)
   const isValidating = ref(false)
@@ -66,17 +67,17 @@ export function useForm<TSchema extends z.ZodObject<any, any>>({
     return acc
   }, {} as Record<SchemaTypeKey, undefined>)
 
-  const values = reactive(clone({
+  const values = reactive<SchemaType>({
     ...defaultValues,
     ...initialValues
-  }))
+  })
 
   const fieldMeta = reactive(
     schemaKeys.value.reduce((acc, key) => {
       acc[key] = {
         touched: false,
         dirty: false,
-        invalid: false,
+        invalid: false, // invalid should be reactive, based on errors
       }
       return acc
     }, {} as Record<SchemaTypeKey, FieldMeta>)
@@ -98,15 +99,31 @@ export function useForm<TSchema extends z.ZodObject<any, any>>({
     }
   })
 
-  const errors = shallowRef({} as Record<SchemaTypeKey, string | undefined>)
+  const errors = reactive<Partial<Record<string, string | undefined>>>({})
 
   const clearErrors = () => {
-    errors.value = {} as Record<SchemaTypeKey, string | undefined>
+    objectKeys(errors).forEach((key) => {
+      delete errors[key]
+    })
   }
 
   const reset = () => {
     Object.assign(values, clone({ ...defaultValues, ...initialValues }))
     clearErrors()
+    schemaKeys.value.forEach((field) => {
+      setFieldTouched(field, false)
+      fieldMeta[field].dirty = false
+      fieldMeta[field].invalid = false
+    })
+    resetSubmitCount()
+  }
+
+  // TODO: wip
+  const clear = (_opts: {
+    clearErrors?: boolean
+  } = {}) => {
+    console.log('clear')
+    Object.assign(values, clone(defaultValues))
   }
 
   const setFieldValue = (field: SchemaTypeKey, value: any) => {
@@ -124,7 +141,7 @@ export function useForm<TSchema extends z.ZodObject<any, any>>({
   }
 
   const setFieldError = (field: SchemaTypeKey, error: string) => {
-    errors.value[field] = clone(error)
+    errors[field] = clone(error)
   }
 
   const validateFieldDryRun = async (field: SchemaTypeKey) => {
@@ -143,10 +160,7 @@ export function useForm<TSchema extends z.ZodObject<any, any>>({
     fieldMeta[field].invalid = !parseRes.success
 
     if (parseRes.success) {
-      errors.value = {
-        ...errors.value,
-        [field]: undefined
-      }
+      errors[field] = undefined
 
       return {
         valid: true,
@@ -155,10 +169,7 @@ export function useForm<TSchema extends z.ZodObject<any, any>>({
     const fieldErrors = (parseRes.error.formErrors.fieldErrors as Record<keyof TypeOf<TSchema>, string[]>)[field]
     const [firstError] = fieldErrors
 
-    errors.value = {
-      ...errors.value,
-      [field]: firstError
-    }
+    errors[field] = firstError
 
     return {
       valid: parseRes.success,
@@ -188,7 +199,7 @@ export function useForm<TSchema extends z.ZodObject<any, any>>({
         const fieldErrorsArray = fieldErrors[key]
         const [firstError] = fieldErrorsArray
 
-        errors.value[key] = firstError
+        errors[key] = firstError
         results[key] = {
           errors: fieldErrorsArray,
           valid: !fieldErrorsArray.length
@@ -198,17 +209,17 @@ export function useForm<TSchema extends z.ZodObject<any, any>>({
 
     return {
       valid: parseRes.success,
-      errors: errors.value,
+      errors,
       results,
     }
   }
 
   const handleSubmit = ({ onValid, onInvalid }: {
     onValid: (values: Readonly<SchemaType>) => void
-    onInvalid?: (errors: Record<keyof z.TypeOf<TSchema>, {
+    onInvalid?: (errors: Partial<Record<SchemaTypeKey, {
       errors: string[]
       valid: boolean
-    }>) => void
+    }>>) => void
   }) => async () => {
     incSubmitCount()
 
@@ -349,7 +360,7 @@ export function useForm<TSchema extends z.ZodObject<any, any>>({
 
   return {
     values: readonly(values), // readonly values
-    errors: readonly(errors), // readonly errors
+    errors: readonly(errors as Partial<Record<SchemaTypeKey, string>>), // readonly errors
     fields: toRefs(values), // v-models of fields
     submitCount: readonly(submitCount),
     isSubmitting: readonly(isSubmitting),
@@ -365,6 +376,7 @@ export function useForm<TSchema extends z.ZodObject<any, any>>({
     handleSubmit,
     validate: validateForm,
     reset,
+    clear,
     bindField,
   }
 }

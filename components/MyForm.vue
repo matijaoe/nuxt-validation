@@ -9,15 +9,15 @@ const schema = z.object({
   password: z.string().min(3).max(255),
   age: z.number().min(18).max(99),
 })
-type Values = z.infer<typeof schema>
 
-const mode: FormValidationMode = 'eager'
+const mode: FormValidationMode = 'touch'
 const modeAfterSubmit: FormValidationModeAfterSubmit = 'input'
 const {
   fields: { name, email, password, age },
   values,
   errors,
   reset,
+  clear,
   validateField,
   handleSubmit,
   setFormValues,
@@ -39,6 +39,9 @@ const {
 const veeForm = useVeeForm({
   validationSchema: toTypedSchema(schema),
   validateOnMount: true,
+  initialValues: {
+    age: 24
+  }
 })
 const { values: veeValues, defineField, errors: veeErrors, validate: veeValidate } = veeForm
 const [veeName] = defineField('name')
@@ -46,10 +49,11 @@ const [veeEmail] = defineField('email')
 const [veePassword] = defineField('password')
 const [veeAge] = defineField('age')
 
-const onSubmit = async (values: Values) => {
+const onSubmit = async (values: z.infer<typeof schema>) => {
   console.log('submit', values)
   await veeValidate()
 }
+console.log(veeForm.errors.value.name)
 
 const submitHandler = handleSubmit({
   onValid: onSubmit,
@@ -99,10 +103,17 @@ const onReset = () => {
                 name: 'patrik'
               })"
             >
-              field values
+              set values
             </UButton>
             <UButton type="button" variant="ghost" @click="validateField('name')">
-              validate name
+              name
+            </UButton>
+            <UButton
+              type="button"
+              variant="ghost"
+              @click="clear()"
+            >
+              clear
             </UButton>
             <UButton type="button" variant="ghost" @click="onReset">
               reset
