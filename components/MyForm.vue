@@ -11,33 +11,34 @@ const schema = z.object({
 })
 type Values = z.infer<typeof schema>
 
-const mode: FormValidationMode = 'submit'
-const modeAfterSubmit: FormValidationModeAfterSubmit = 'submit'
+const mode: FormValidationMode = 'eager'
+const modeAfterSubmit: FormValidationModeAfterSubmit = 'input'
 const {
+  fields: { name, email, password, age },
   values,
-  fields,
   errors,
-  isSubmitting,
   reset,
   validateField,
-  submitCount,
   handleSubmit,
   setFormValues,
+  bindField,
+  submitCount,
   meta,
-  fieldsMeta,
-  onField,
+  fieldMeta,
+  isSubmitting,
 } = useForm({
   schema,
   mode,
   modeAfterSubmit,
+  dryValidateOnMount: true,
   initialValues: {
     age: 24
   }
 })
-const { name, email, password, age } = fields
 
 const veeForm = useVeeForm({
   validationSchema: toTypedSchema(schema),
+  validateOnMount: true,
 })
 const { values: veeValues, defineField, errors: veeErrors, validate: veeValidate } = veeForm
 const [veeName] = defineField('name')
@@ -77,16 +78,16 @@ const onReset = () => {
         </div>
         <div class="flex flex-col gap-4">
           <UFormGroup :error="errors.name">
-            <UInput v-model="name" placeholder="Name" name="name" v-on="onField" />
+            <UInput v-model="name" placeholder="Name" v-bind="bindField('name')" />
           </UFormGroup>
           <UFormGroup :error="errors.email">
-            <UInput v-model="email" type="text" placeholder="Email" name="email" v-on="onField" />
+            <UInput v-model="email" type="text" placeholder="Email" v-bind="bindField('email')" />
           </UFormGroup>
           <UFormGroup :error="errors.password">
-            <UInput v-model="password" type="password" placeholder="Password" name="password" v-on="onField" />
+            <UInput v-model="password" type="password" placeholder="Password" v-bind="bindField('password')" />
           </UFormGroup>
           <UFormGroup :error="errors.age">
-            <UInput v-model="age" type="number" placeholder="Age" name="age" v-on="onField" />
+            <UInput v-model="age" type="number" placeholder="Age" v-bind="bindField('age')" />
           </UFormGroup>
 
           <div class="flex justify-end gap-2">
@@ -117,8 +118,8 @@ const onReset = () => {
               <pre>{{ meta }}</pre>
             </UCard>
             <UCard>
-              <strong>fieldsMeta</strong>
-              <pre>{{ fieldsMeta }}</pre>
+              <strong>fieldMeta</strong>
+              <pre>{{ fieldMeta }}</pre>
             </UCard>
           </div>
         </div>

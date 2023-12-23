@@ -3,25 +3,12 @@ import { clone, objectKeys } from 'utilipea'
 import { reactive, toRefs } from 'vue'
 import type { TypeOf, z } from 'zod'
 
-// to me, best seems, on initial intereaction, as soon as you become valid (or blur), start validating
-
-/*
-ideas
-mode: {
-  inital: 'blur' | 'input' | 'submit' | 'touch'
-  onInvalid: 'blur' | 'input'
-  afterSubmit: 'blur' | 'input'
-}
- */
-
 /*
 - aggressive - validate on input, all the time
 - touch - initially validate only after touch (blur), on input thereafter
 - eager - initially validate when touched OR as soon as as it becomes valid (even before first blur/touch), so that it shows errors when going from inital valid to invalid
 - lazy - validate on blur
 - smartLazy - initially validate on blur, validate and blur AND until and when invalid (until valid) thereafter
-- submitThenEager - validate on submit, validate on input thereafter
-- submitThenLazy - validate on submit, validate on input thereafter
 - submit - validate on submit only
 */
 
@@ -33,25 +20,20 @@ export type UseFormOptions<TSchema extends z.ZodType<any, any, any>> = {
   initialValues?: Partial<z.infer<TSchema>>
   mode?: FormValidationMode
   modeAfterSubmit?: FormValidationModeAfterSubmit
-}
-
-function createReactive<T extends Record<string, unknown>>(obj: T): T {
-  return reactive(obj) as T
+  validateOnMount?: boolean
+  dryValidateOnMount?: boolean
 }
 
 type FormMeta = {
   touched: boolean
   dirty: boolean
   invalid: boolean
-  validated: boolean // entire form has been validated
-  anyValidated: boolean // any field has been validated
 }
 
 type FieldMeta = {
   touched: boolean
   dirty: boolean
   invalid: boolean
-  validated: boolean
 }
 
 // ----------------------------------------------------------
@@ -62,6 +44,8 @@ export function useForm<TSchema extends z.ZodObject<any, any>>({
   initialValues = {},
   mode = 'smartLazy',
   modeAfterSubmit = 'input',
+  validateOnMount,
+  dryValidateOnMount,
 }: UseFormOptions<TSchema>) {
   const {
     count: submitCount,
@@ -69,12 +53,6 @@ export function useForm<TSchema extends z.ZodObject<any, any>>({
   } = useCounter(0)
   const isSubmitting = ref(false)
   const isValidating = ref(false)
-
-  // const meta: FormMeta = reactive({
-  //   touched: false,
-  //   dirty: false,
-  //   invalid: false,
-  // })
 
   const isSubmitted = computed(() => submitCount.value > 0)
 
@@ -88,41 +66,35 @@ export function useForm<TSchema extends z.ZodObject<any, any>>({
     return acc
   }, {} as Record<SchemaTypeKey, undefined>)
 
-  const values = createReactive<SchemaType>(clone({
+  const values = reactive(clone({
     ...defaultValues,
     ...initialValues
   }))
 
-  const fieldsMeta = reactive(
+  const fieldMeta = reactive(
     schemaKeys.value.reduce((acc, key) => {
       acc[key] = {
         touched: false,
         dirty: false,
         invalid: false,
-        validated: false,
       }
       return acc
     }, {} as Record<SchemaTypeKey, FieldMeta>)
   ) as Record<SchemaTypeKey, FieldMeta>
 
   const formMeta = computed<FormMeta>(() => {
-    const fieldMetaValues = Object.values(fieldsMeta)
+    const fieldMetaValues = Object.values(fieldMeta)
 
-    const someFieldMetaValues = (metaItem: keyof FieldMeta) => fieldMetaValues.some((meta) => meta[metaItem])
+    const someFieldMeta = (metaItem: keyof FieldMeta) => fieldMetaValues.some((meta) => meta[metaItem])
 
-    const touched = someFieldMetaValues('touched')
-    const dirty = someFieldMetaValues('dirty')
-    const invalid = someFieldMetaValues('invalid')
-    const anyValidated = someFieldMetaValues('validated')
-
-    const validated = fieldMetaValues.every((meta) => meta.validated)
+    const touched = someFieldMeta('touched')
+    const dirty = someFieldMeta('dirty')
+    const invalid = someFieldMeta('invalid')
 
     return {
       touched,
       dirty,
       invalid,
-      anyValidated,
-      validated
     }
   })
 
@@ -139,10 +111,16 @@ export function useForm<TSchema extends z.ZodObject<any, any>>({
 
   const setFieldValue = (field: SchemaTypeKey, value: any) => {
     values[field] = clone(value)
+    fieldMeta[field].dirty = true
+    setFieldTouched(field, true)
   }
 
   const setFormValues = (fields: Partial<SchemaType>) => {
     Object.assign(values, clone(fields))
+    schemaKeys.value.forEach((field) => {
+      fieldMeta[field].dirty = true
+      setFieldTouched(field, true)
+    })
   }
 
   const setFieldError = (field: SchemaTypeKey, error: string) => {
@@ -162,8 +140,7 @@ export function useForm<TSchema extends z.ZodObject<any, any>>({
 
     const parseRes = await fieldSchema.safeParseAsync({ [field]: values[field] })
 
-    fieldsMeta[field].invalid = !parseRes.success
-    fieldsMeta[field].validated = true
+    fieldMeta[field].invalid = !parseRes.success
 
     if (parseRes.success) {
       errors.value = {
@@ -190,13 +167,11 @@ export function useForm<TSchema extends z.ZodObject<any, any>>({
     }
   }
 
-  const validate = async () => {
+  const validateForm = async () => {
     const parseRes = await schema.safeParseAsync(values)
 
-    // set every field as touched
     schemaKeys.value.forEach((field) => {
-      fieldsMeta[field].touched = true
-      fieldsMeta[field].validated = true
+      setFieldTouched(field, true)
     })
 
     clearErrors()
@@ -240,7 +215,7 @@ export function useForm<TSchema extends z.ZodObject<any, any>>({
     set(isSubmitted, true)
     set(isValidating, true)
 
-    const result = clone(await validate())
+    const result = clone(await validateForm())
 
     set(isValidating, false)
 
@@ -254,41 +229,36 @@ export function useForm<TSchema extends z.ZodObject<any, any>>({
     set(isSubmitting, false)
   }
 
-  function fieldElementName(e: Event) {
-    return (e.currentTarget as HTMLInputElement)?.name
-  }
-
-  function isValidFieldName(name: string): boolean {
-    return schemaKeys.value.includes(name)
-  }
-
   const setFieldTouched = (field: SchemaTypeKey, value: boolean) => {
-    fieldsMeta[field].touched = value
+    fieldMeta[field].touched = value
   }
 
-  // TODO: this seems out of place
-  if (mode === 'eager') {
+  if (validateOnMount) {
+    validateForm()
+  } else if (dryValidateOnMount) {
     schemaKeys.value.forEach(async (field) => {
       const valid = await validateFieldDryRun(field)
       if (valid) {
-        fieldsMeta[field].validated = true
+        // they are invalid by default anyway
+        fieldMeta[field].invalid = false
+
+        // TODO touches ONLY if valid - only because of eager state
+        // do i want that?
+        setFieldTouched(field, true)
       }
     })
   }
 
   const fieldHandlers = {
-    input: async (e: InputEvent) => {
-      const name = fieldElementName(e)
-      if (!isValidFieldName(name)) { return }
+    input: async (field: SchemaTypeKey) => {
+      const currentFieldMeta = fieldMeta[field]
 
-      const fieldMeta = fieldsMeta[name]
-
-      fieldMeta.dirty = true
+      currentFieldMeta.dirty = true
 
       if (isSubmitted.value) {
         if (modeAfterSubmit === 'input') {
           nextTick(() => {
-            validateField(name)
+            validateField(field)
           })
         }
         return
@@ -297,42 +267,44 @@ export function useForm<TSchema extends z.ZodObject<any, any>>({
       switch (mode) {
         case 'aggressive':
           nextTick(() => {
-            validateField(name)
+            validateField(field)
           })
           break
         case 'touch': {
-          if (fieldMeta.touched) {
+          if (currentFieldMeta.touched) {
             nextTick(() => {
-              validateField(name)
+              validateField(field)
             })
           }
           break
         }
         // not too great, should take into account if its initially valid (set inital value)
         case 'eager': {
-          if (fieldMeta.touched || fieldMeta.validated) {
+          if (currentFieldMeta.touched) {
             nextTick(() => {
-              validateField(name)
+              validateField(field)
             })
             return
           }
-          // TODO: no unnecessary double validation
           // field not touched (no blur event yet)
           // do dry run validation
-          // mark it as validataed when it becomes valid
+          // mark it as validated when it becomes valid
           nextTick(async () => {
-            const valid = await validateFieldDryRun(name)
+            const valid = await validateFieldDryRun(field)
             if (valid) {
-              fieldMeta.validated = true
-              validateField(name)
+              setFieldTouched(field, true)
+              // TODO: no unnecessary double validation, rethink this
+              nextTick(async () => {
+                await validateField(field)
+              })
             }
           })
           break
         }
         case 'smartLazy':
-          if (fieldMeta.invalid) {
+          if (currentFieldMeta.invalid) {
             nextTick(() => {
-              validateField(name)
+              validateField(field)
             })
           }
           break
@@ -341,18 +313,13 @@ export function useForm<TSchema extends z.ZodObject<any, any>>({
           break
       }
     },
-    blur: (e: FocusEvent) => {
-      const name = fieldElementName(e)
-      if (!isValidFieldName(name)) { return }
-
-      const fieldMeta = fieldsMeta[name]
-
-      fieldMeta.touched = true
+    blur: (field: SchemaTypeKey) => {
+      setFieldTouched(field, true)
 
       if (isSubmitted.value) {
         if (modeAfterSubmit === 'blur') {
           nextTick(() => {
-            validateField(name)
+            validateField(field)
           })
         }
         return
@@ -365,7 +332,7 @@ export function useForm<TSchema extends z.ZodObject<any, any>>({
         case 'smartLazy':
         case 'lazy':
           nextTick(() => {
-            validateField(name)
+            validateField(field)
           })
           break
         case 'submit':
@@ -374,12 +341,20 @@ export function useForm<TSchema extends z.ZodObject<any, any>>({
     }
   }
 
+  const bindField = (field: SchemaTypeKey) => ({
+    field,
+    onInput: () => fieldHandlers.input(field),
+    onBlur: () => fieldHandlers.blur(field),
+  })
+
   return {
-    values: readonly(values),
-    errors: readonly(errors),
-    fields: toRefs(values),
+    values: readonly(values), // readonly values
+    errors: readonly(errors), // readonly errors
+    fields: toRefs(values), // v-models of fields
     submitCount: readonly(submitCount),
     isSubmitting: readonly(isSubmitting),
+    meta: toRef(formMeta),
+    fieldMeta: toRef(fieldMeta),
     // individual fields functions
     setFieldTouched,
     setFieldValue,
@@ -388,10 +363,8 @@ export function useForm<TSchema extends z.ZodObject<any, any>>({
     setFormValues,
     // form functions
     handleSubmit,
-    validate,
+    validate: validateForm,
     reset,
-    meta: toRef(formMeta),
-    fieldsMeta: toRef(fieldsMeta),
-    onField: fieldHandlers
+    bindField,
   }
 }
