@@ -19,9 +19,14 @@ const {
   reset,
   validateField,
   submitCount,
-  handleSubmit
+  handleSubmit,
+  setFormValues,
+  meta,
+  fieldsMeta,
+  fieldHandlers,
 } = useForm({
   schema,
+  mode: 'lazy',
   initialValues: {
     age: 24
   }
@@ -57,6 +62,11 @@ const onReset = () => {
   reset()
   veeForm.resetForm()
 }
+
+const onNameChange = (e: InputEvent) => {
+  const keys = Object.keys(e)
+  const name = (e.currentTarget as HTMLInputElement).name
+}
 </script>
 
 <template>
@@ -65,19 +75,29 @@ const onReset = () => {
       <UCard>
         <div class="flex flex-col gap-4">
           <UFormGroup :error="errors.name">
-            <UInput v-model="name" placeholder="Name" />
+            <UInput v-model="name" placeholder="Name" name="name" @input="onNameChange" v-on="fieldHandlers" />
           </UFormGroup>
           <UFormGroup :error="errors.email">
-            <UInput v-model="email" type="text" placeholder="Email" />
+            <UInput v-model="email" type="text" placeholder="Email" name="email" v-on="fieldHandlers" />
           </UFormGroup>
           <UFormGroup :error="errors.password">
-            <UInput v-model="password" type="password" placeholder="Password" />
+            <UInput v-model="password" type="password" placeholder="Password" name="password" v-on="fieldHandlers" />
           </UFormGroup>
           <UFormGroup :error="errors.age">
-            <UInput v-model="age" type="number" placeholder="Age" />
+            <UInput v-model="age" type="number" placeholder="Age" name="age" v-on="fieldHandlers" />
           </UFormGroup>
 
           <div class="flex justify-end gap-2">
+            <UButton
+              type="button"
+              variant="ghost"
+              @click="setFormValues({
+                age: 99,
+                name: ''
+              })"
+            >
+              field values
+            </UButton>
             <UButton type="button" variant="ghost" @click="validateField('name')">
               validate name
             </UButton>
@@ -87,6 +107,17 @@ const onReset = () => {
             <UButton type="submit">
               submit ({{ submitCount }})
             </UButton>
+          </div>
+
+          <div>
+            <UCard>
+              <strong>meta</strong>
+              <pre>{{ meta }}</pre>
+            </UCard>
+            <UCard>
+              <strong>fieldsMeta</strong>
+              <pre>{{ fieldsMeta }}</pre>
+            </UCard>
           </div>
         </div>
       </UCard>
